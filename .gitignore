@@ -1,0 +1,32 @@
+# --- Compiled Binaries ---
+*.out
+*.exe
+*.o
+*.obj
+*.so
+*.dll
+*.dylib
+
+# --- Executables ---
+# Often C programs are named without extensions. 
+# You might want to list your specific executable name here, e.g.:
+# my_program
+# bin/
+
+# --- Build Directories ---
+build/
+dist/
+bin/
+
+# --- IDE & Editor Folders ---
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# --- Debug/Testing ---
+*.log
+*.dSYM/
+
+.env
