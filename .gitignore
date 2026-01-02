@@ -30,3 +30,7 @@ bin/
 *.dSYM/
 
 .env
+
+/benchmarks/
+/tests/data/
+/tests/fixtures/

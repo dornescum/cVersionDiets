@@ -74,4 +74,31 @@ enum MHD_Result handle_list_foods(struct MHD_Connection *connection);
  */
 enum MHD_Result handle_get_food(struct MHD_Connection *connection, int id);
 
+/**
+ * @brief Handles GET /api/templates/{id}/full endpoint.
+ *
+ * Returns complete template with nested days, meals, and food items.
+ * Response: {"success": true, "template": {id, name, days: [{meals: [{items: [...]}]}]}}
+ *
+ * @param connection The MHD connection handle
+ * @param id Template ID from URL path
+ * @return MHD_YES on success, MHD_NO on failure
+ */
+enum MHD_Result handle_get_template_full(struct MHD_Connection *connection, int id);
+
+/**
+ * @brief Handles POST /api/benchmark/bulk-insert endpoint.
+ *
+ * Bulk inserts meal items for benchmarking write performance.
+ * Request: {"meal_id": N, "items": [{food_item_id, portion_grams_min, ...}]}
+ * Response: {"success": true, "inserted_count": N}
+ *
+ * @param connection The MHD connection handle
+ * @param post_data JSON body data
+ * @param post_data_size Size of POST data
+ * @return MHD_YES on success, MHD_NO on failure
+ */
+enum MHD_Result handle_bulk_insert(struct MHD_Connection *connection,
+                                   const char *post_data, size_t post_data_size);
+
 #endif

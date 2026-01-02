@@ -54,6 +54,43 @@ static int extract_id_from_path(const char *url, const char *prefix) {
     return atoi(id_str);
 }
 
+/** @brief Maximum POST body size (1MB) */
+#define MAX_POST_SIZE (1024 * 1024)
+
+/**
+ * @brief Connection context for accumulating POST data.
+ */
+struct connection_info {
+    char *post_data;      /**< Accumulated POST body */
+    size_t post_data_len; /**< Current length of accumulated data */
+};
+
+/**
+ * @brief Extracts template ID from /api/templates/{id}/full path.
+ *
+ * @param url Full request URL
+ * @return Template ID, or -1 if URL doesn't match pattern
+ */
+static int extract_template_id(const char *url) {
+    const char *prefix = "/api/templates/";
+    size_t prefix_len = strlen(prefix);
+
+    if (strncmp(url, prefix, prefix_len) != 0) {
+        return -1;
+    }
+
+    const char *id_start = url + prefix_len;
+    char *endptr;
+    long id = strtol(id_start, &endptr, 10);
+
+    /* Check that we got a number followed by /full */
+    if (endptr == id_start || strcmp(endptr, "/full") != 0) {
+        return -1;
+    }
+
+    return (int)id;
+}
+
 /**
  * @brief Main HTTP request handler callback.
  *
@@ -65,9 +102,9 @@ static int extract_id_from_path(const char *url, const char *prefix) {
  * @param url Request URL path
  * @param method HTTP method (GET, POST, etc.)
  * @param version HTTP version string (unused)
- * @param upload_data POST/PUT body data (unused)
- * @param upload_data_size Size of upload data (unused)
- * @param con_cls Connection-specific data (unused)
+ * @param upload_data POST/PUT body data
+ * @param upload_data_size Size of upload data
+ * @param con_cls Connection-specific data for POST accumulation
  * @return MHD_YES on success, MHD_NO on failure
  */
 static enum MHD_Result request_handler(
@@ -82,13 +119,75 @@ static enum MHD_Result request_handler(
 {
     (void)cls;
     (void)version;
-    (void)upload_data;
-    (void)upload_data_size;
-    (void)con_cls;
 
     /* Handle CORS preflight requests */
     if (strcmp(method, "OPTIONS") == 0) {
         return send_json_response(connection, 200, "{}");
+    }
+
+    /* POST request handling - accumulate body data */
+    if (strcmp(method, "POST") == 0) {
+        struct connection_info *con_info;
+
+        /* First call for this connection - initialize context */
+        if (*con_cls == NULL) {
+            con_info = calloc(1, sizeof(struct connection_info));
+            if (con_info == NULL) {
+                return MHD_NO;
+            }
+            *con_cls = con_info;
+            return MHD_YES;
+        }
+
+        con_info = *con_cls;
+
+        /* More data to accumulate */
+        if (*upload_data_size > 0) {
+            /* Check size limit */
+            if (con_info->post_data_len + *upload_data_size > MAX_POST_SIZE) {
+                free(con_info->post_data);
+                free(con_info);
+                *con_cls = NULL;
+                return send_error_response(connection, 413, "Request body too large");
+            }
+
+            /* Reallocate and append data */
+            char *new_data = realloc(con_info->post_data,
+                                     con_info->post_data_len + *upload_data_size + 1);
+            if (new_data == NULL) {
+                free(con_info->post_data);
+                free(con_info);
+                *con_cls = NULL;
+                return MHD_NO;
+            }
+
+            memcpy(new_data + con_info->post_data_len, upload_data, *upload_data_size);
+            con_info->post_data_len += *upload_data_size;
+            new_data[con_info->post_data_len] = '\0';
+            con_info->post_data = new_data;
+
+            *upload_data_size = 0;
+            return MHD_YES;
+        }
+
+        /* All data received - route to handler */
+        enum MHD_Result result;
+
+        /* Route: POST /api/benchmark/bulk-insert */
+        if (strcmp(url, "/api/benchmark/bulk-insert") == 0) {
+            result = handle_bulk_insert(connection,
+                                       con_info->post_data ? con_info->post_data : "",
+                                       con_info->post_data_len);
+        } else {
+            result = send_error_response(connection, 404, "Not found");
+        }
+
+        /* Cleanup POST data */
+        free(con_info->post_data);
+        free(con_info);
+        *con_cls = NULL;
+
+        return result;
     }
 
     /* Route: GET /health */
@@ -119,6 +218,14 @@ static enum MHD_Result request_handler(
         int id = extract_id_from_path(url, "/api/foods/");
         if (id > 0) {
             return handle_get_food(connection, id);
+        }
+    }
+
+    /* Route: GET /api/templates/{id}/full */
+    if (strcmp(method, "GET") == 0) {
+        int template_id = extract_template_id(url);
+        if (template_id > 0) {
+            return handle_get_template_full(connection, template_id);
         }
     }
 

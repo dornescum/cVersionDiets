@@ -41,6 +41,8 @@ MYSQL *db_get_connection(void);
 /**
  * @brief Executes a SQL query and returns the result set.
  *
+ * Thread-safe - uses mutex to protect the connection.
+ *
  * @param query SQL query string to execute
  * @return MYSQL_RES pointer on success (caller must free with mysql_free_result),
  *         NULL on error
@@ -49,5 +51,15 @@ MYSQL *db_get_connection(void);
  *          for user-provided values to prevent SQL injection.
  */
 MYSQL_RES *db_query(const char *query);
+
+/**
+ * @brief Executes a SQL statement that doesn't return results (INSERT/UPDATE/DELETE).
+ *
+ * Thread-safe - uses mutex to protect the connection.
+ *
+ * @param query SQL statement to execute
+ * @return Number of affected rows on success, -1 on error
+ */
+int db_execute(const char *query);
 
 #endif
